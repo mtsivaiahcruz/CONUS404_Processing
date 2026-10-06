@@ -69,6 +69,19 @@ class GevReturnLevelTests(unittest.TestCase):
             nearby = RETURN_PERIODS.gev_return_level(100, 30.0, 5.0, shape)
             self.assertAlmostEqual(nearby, at_zero, places=2)
 
+    def test_32_bit_inputs_give_the_same_level(self):
+        # The parameter grids are stored as 32-bit floats.
+        for shape in (-0.3, 2e-5, 0.3):
+            shape_32 = np.float32(shape)
+            from_32_bit = RETURN_PERIODS.gev_return_level(
+                100, np.float32(30.0), np.float32(5.0), shape_32
+            )
+            from_64_bit = RETURN_PERIODS.gev_return_level(
+                100, 30.0, 5.0, float(shape_32)
+            )
+
+            self.assertAlmostEqual(from_32_bit, from_64_bit, places=12)
+
 
 class GevReturnLevelCiTests(unittest.TestCase):
     def test_information_matrix_at_zero_shape(self):
@@ -165,6 +178,20 @@ class GevReturnLevelCiTests(unittest.TestCase):
         for shape in (-1e-4, 1e-4):
             nearby = RETURN_PERIODS.gev_return_level_ci(100, 12.0, 1.5, shape, 45)
             np.testing.assert_allclose(nearby, at_zero, atol=0.01)
+
+    def test_32_bit_inputs_give_the_same_interval(self):
+        # The parameter grids are stored as 32-bit floats. The interval
+        # formulas are not accurate in 32-bit arithmetic when the shape is small.
+        for shape in (-0.3, -0.03, 0.012, 0.3):
+            shape_32 = np.float32(shape)
+            from_32_bit = RETURN_PERIODS.gev_return_level_ci(
+                100, np.float32(12.0), np.float32(1.5), shape_32, np.int64(45)
+            )
+            from_64_bit = RETURN_PERIODS.gev_return_level_ci(
+                100, 12.0, 1.5, float(shape_32), 45
+            )
+
+            np.testing.assert_allclose(from_32_bit, from_64_bit, rtol=1e-12)
 
     def test_no_interval_when_shape_is_half_or_more(self):
         lower, upper = RETURN_PERIODS.gev_return_level_ci(100, 12.0, 1.5, 0.5, 45)

@@ -70,6 +70,9 @@ def gev_return_level(return_period, location, scale, shape):
     Returns:
         Return level (wind speed)
     """
+    # The parameter grids are stored as 32-bit floats. Do the arithmetic in 64-bit.
+    location, scale, shape = float(location), float(scale), float(shape)
+    
     if scale <= 0 or np.isnan(location) or np.isnan(scale) or np.isnan(shape):
         return np.nan
     
@@ -94,16 +97,18 @@ def gev_information_matrix(shape):
     Returns:
         3 × 3 array with rows and columns ordered (location, scale, shape)
     """
-    # The formulas below divide by the shape up to four times, so they lose
-    # precision close to zero. Inside ±0.005, interpolate between the two edges.
+    # The formulas below subtract nearly equal numbers, so work in 64-bit
+    k = float(shape)
+    
+    # They also divide by the shape up to four times, so they lose precision
+    # close to zero. Inside ±0.005, interpolate between the two edges.
     near_zero = 0.005
-    if abs(shape) < near_zero:
+    if abs(k) < near_zero:
         below = gev_information_matrix(-near_zero)
         above = gev_information_matrix(near_zero)
-        weight = (shape + near_zero) / (2.0 * near_zero)
+        weight = (k + near_zero) / (2.0 * near_zero)
         return (1.0 - weight) * below + weight * above
     
-    k = shape
     euler = np.euler_gamma
     g = gamma(2.0 - k)
     p = (1.0 - k) ** 2 * gamma(1.0 - 2.0 * k)
@@ -135,13 +140,15 @@ def gev_parameter_covariance(scale, shape, data_points):
     unit_covariance = np.linalg.inv(gev_information_matrix(shape))
     
     # Location and scale are wind speeds, so their rows and columns scale with σ
-    units = np.array([scale, scale, 1.0])
+    units = np.array([scale, scale, 1.0], dtype=np.float64)
     return unit_covariance * np.outer(units, units) / data_points
 
 def gev_return_level_gradient(return_period, scale, shape):
     """
     Derivatives of the return level with respect to (location, scale, shape).
     """
+    scale, shape = float(scale), float(shape)
+    
     y = -np.log(1.0 - 1.0 / return_period)
     log_y = np.log(y)
     
@@ -177,6 +184,10 @@ def gev_return_level_ci(return_period, location, scale, shape, data_points=40):
         (lower, upper) bounds. Both are NaN when shape >= 0.5, where the
         covariance does not exist.
     """
+    # The parameter grids are stored as 32-bit floats, which are not precise
+    # enough for the formulas used here. Do the arithmetic in 64-bit.
+    location, scale, shape = float(location), float(scale), float(shape)
+    
     # Calculate return level
     rp_level = gev_return_level(return_period, location, scale, shape)
     
