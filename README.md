@@ -99,8 +99,8 @@ Computes wind speed return levels and 95% confidence intervals for all grid poin
 
 - Loads GEV parameters from Phase 3
 - For each return period R in [10, 25, 50, 100, 200, 500]:
-  - Calculates return level via GEV inverse CDF: `x = μ + (σ/ξ) × [1 − (−log(1 − 1/R))^ξ]`
-  - Computes 95% confidence intervals using the delta method
+  - Calculates return level via GEV inverse CDF: `x = μ + (σ/ξ) × [1 − (−log(1 − 1/R))^ξ]`, or the Gumbel form `x = μ − σ × log(−log(1 − 1/R))` when ξ = 0
+  - Computes 95% confidence intervals using the delta method, with the parameter covariance taken from the expected Fisher information of the GEV
   - Verifies monotonic increase across return periods
 - After return-level calculation, converts native CONUS404 20-second model-time-step wind maxima to 3-second engineering gusts using the Durst Curve factor `1.1176`
 - Preserves native estimates and confidence bounds; the conversion is written as a parallel derived product rather than overwriting source-duration results
@@ -214,7 +214,9 @@ CONUS404_Processing/
 $$x = \mu + \frac{\sigma}{\xi} \left[1 - \left(-\ln\left(1 - \frac{1}{R}\right)\right)^\xi\right]$$
 
 ### Confidence Intervals
-- **Method:** Delta method (95%)
+- **Method:** Delta method (95%). The standard error of a return level is √(g′Vg), where g holds the derivatives of the return level with respect to (μ, σ, ξ) and V is the covariance of the fitted parameters
+- **Covariance:** Inverse of the expected Fisher information of the GEV (Prescott and Walden, 1980), for the number of years in the record. This is the large-sample covariance of a maximum likelihood fit, so the interval is an approximation for parameters fitted another way, such as L-moments
+- **Limits:** No interval is given (NaN) where the fitted shape is 0.5 or more in SciPy's sign convention, because the covariance does not exist there. The interval is symmetric and tends to be too narrow at long return periods for a record of about 45 years
 - **Behavior:** Intervals widen significantly for longer return periods — this is statistically correct for a ~40-year record extrapolated to 200–500 year events
 
 ### Wind-Duration Conversion

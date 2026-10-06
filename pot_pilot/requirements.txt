@@ -1,0 +1,13 @@
+# For steps 01 to 13 and test_pot.py
+numpy
+pandas
+scipy
+matplotlib
+pyfive
+lmoments3
+# For the two extraction scripts and tests/test_extraction_scripts.py
+xarray
+dask
+zarr
+s3fs
+netCDF4

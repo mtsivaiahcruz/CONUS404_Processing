@@ -9,6 +9,7 @@ import h5py
 import netCDF4 as nc
 import numpy as np
 import pandas as pd
+from scipy.stats import genextreme, gumbel_r
 
 from coordinate_utils import write_hdf5_coordinates
 
@@ -44,6 +45,132 @@ class Convert20sTo3sGustTests(unittest.TestCase):
             atol=0.0,
             equal_nan=True,
         )
+
+
+class GevReturnLevelTests(unittest.TestCase):
+    def test_zero_shape_matches_gumbel(self):
+        for return_period in (10, 100, 500):
+            level = RETURN_PERIODS.gev_return_level(return_period, 30.0, 5.0, 0.0)
+            expected = gumbel_r.isf(1.0 / return_period, loc=30.0, scale=5.0)
+
+            self.assertAlmostEqual(level, expected, places=9)
+
+    def test_nonzero_shape_matches_scipy(self):
+        for shape in (-0.3, -0.05, 0.05, 0.3):
+            level = RETURN_PERIODS.gev_return_level(100, 30.0, 5.0, shape)
+            expected = genextreme.isf(0.01, shape, loc=30.0, scale=5.0)
+
+            self.assertAlmostEqual(level, expected, places=9)
+
+    def test_return_level_is_continuous_at_zero_shape(self):
+        at_zero = RETURN_PERIODS.gev_return_level(100, 30.0, 5.0, 0.0)
+
+        for shape in (-1e-5, 1e-5):
+            nearby = RETURN_PERIODS.gev_return_level(100, 30.0, 5.0, shape)
+            self.assertAlmostEqual(nearby, at_zero, places=2)
+
+
+class GevReturnLevelCiTests(unittest.TestCase):
+    def test_information_matrix_at_zero_shape(self):
+        # Known values for the Gumbel limit of the GEV.
+        euler = np.euler_gamma
+        information = RETURN_PERIODS.gev_information_matrix(0.0)
+
+        self.assertAlmostEqual(information[0, 0], 1.0, places=3)
+        self.assertAlmostEqual(information[0, 1], -(1.0 - euler), places=3)
+        self.assertAlmostEqual(
+            information[1, 1], np.pi**2 / 6.0 + (1.0 - euler) ** 2, places=3
+        )
+        np.testing.assert_array_equal(information, information.T)
+
+    def test_information_matrix_matches_average_of_scores(self):
+        # The information matrix is the average of score x score', where the
+        # score is the derivative of the log density in each parameter. The
+        # average is taken over an even grid of probabilities.
+        step = 1e-5
+        for shape in (-0.2, 0.1):
+            probabilities = (np.arange(200000) + 0.5) / 200000
+            sample = genextreme.ppf(probabilities, shape)
+            parameters = np.array([0.0, 1.0, shape])
+            scores = []
+            for index in range(3):
+                up = parameters.copy()
+                down = parameters.copy()
+                up[index] += step
+                down[index] -= step
+                scores.append(
+                    (
+                        genextreme.logpdf(sample, up[2], up[0], up[1])
+                        - genextreme.logpdf(sample, down[2], down[0], down[1])
+                    )
+                    / (2.0 * step)
+                )
+            scores = np.array(scores)
+            average = scores @ scores.T / sample.size
+
+            np.testing.assert_allclose(
+                RETURN_PERIODS.gev_information_matrix(shape), average, atol=0.03
+            )
+
+    def test_gradient_matches_numerical_derivative(self):
+        step = 1e-5
+        for shape in (-0.2, 0.0, 0.2):
+            gradient = RETURN_PERIODS.gev_return_level_gradient(100, 5.0, shape)
+            parameters = np.array([30.0, 5.0, shape])
+            for index in range(3):
+                up = parameters.copy()
+                down = parameters.copy()
+                up[index] += step
+                down[index] -= step
+                numerical = (
+                    genextreme.isf(0.01, up[2], up[0], up[1])
+                    - genextreme.isf(0.01, down[2], down[0], down[1])
+                ) / (2.0 * step)
+
+                self.assertAlmostEqual(gradient[index], numerical, places=4)
+
+    def test_interval_is_centred_on_the_estimate(self):
+        estimate = RETURN_PERIODS.gev_return_level(100, 12.0, 1.5, -0.1)
+        lower, upper = RETURN_PERIODS.gev_return_level_ci(
+            100, 12.0, 1.5, -0.1, data_points=45
+        )
+
+        self.assertGreater(lower, 0.0)
+        self.assertLess(lower, estimate)
+        self.assertAlmostEqual((lower + upper) / 2.0, estimate)
+
+    def test_interval_widens_with_return_period(self):
+        widths = []
+        for return_period in (10, 25, 50, 100, 200, 500):
+            lower, upper = RETURN_PERIODS.gev_return_level_ci(
+                return_period, 12.0, 1.5, -0.1, data_points=45
+            )
+            widths.append(upper - lower)
+
+        self.assertEqual(widths, sorted(widths))
+
+    def test_four_times_the_years_halves_the_width(self):
+        lower_45, upper_45 = RETURN_PERIODS.gev_return_level_ci(
+            100, 12.0, 1.5, -0.1, data_points=45
+        )
+        lower_180, upper_180 = RETURN_PERIODS.gev_return_level_ci(
+            100, 12.0, 1.5, -0.1, data_points=180
+        )
+
+        self.assertAlmostEqual((upper_45 - lower_45) / (upper_180 - lower_180), 2.0)
+
+    def test_interval_is_continuous_at_zero_shape(self):
+        at_zero = RETURN_PERIODS.gev_return_level_ci(100, 12.0, 1.5, 0.0, 45)
+
+        for shape in (-1e-4, 1e-4):
+            nearby = RETURN_PERIODS.gev_return_level_ci(100, 12.0, 1.5, shape, 45)
+            np.testing.assert_allclose(nearby, at_zero, atol=0.01)
+
+    def test_no_interval_when_shape_is_half_or_more(self):
+        lower, upper = RETURN_PERIODS.gev_return_level_ci(100, 12.0, 1.5, 0.5, 45)
+
+        self.assertTrue(np.isnan(lower))
+        self.assertTrue(np.isnan(upper))
 
 
 class Phase4ExportTests(unittest.TestCase):

@@ -15,6 +15,7 @@ import h5py
 import numpy as np
 import netCDF4 as nc
 import pandas as pd
+from scipy.special import digamma, gamma
 from scipy.stats import genextreme, norm
 from datetime import datetime
 
@@ -58,6 +59,7 @@ def gev_return_level(return_period, location, scale, shape):
     Calculate GEV return level for a given return period.
     
     Formula: x = μ + (σ/ξ) × [1 - (-log(1 - 1/R))^ξ]
+    As ξ → 0 this becomes the Gumbel formula: x = μ - σ × log(-log(1 - 1/R))
     
     Args:
         return_period: Return period in years (R)
@@ -75,52 +77,118 @@ def gev_return_level(return_period, location, scale, shape):
         p = 1.0 - 1.0 / return_period
         
         if np.abs(shape) < 1e-6:  # Gumbel case (ξ ≈ 0)
-            return location + scale * np.log(-np.log(p))
+            return location - scale * np.log(-np.log(p))
         else:
             return location + (scale / shape) * (1.0 - (-np.log(p)) ** shape)
     except:
         return np.nan
 
+def gev_information_matrix(shape):
+    """
+    Expected Fisher information for one observation from a GEV distribution
+    with location 0 and scale 1 (Prescott and Walden, 1980, Biometrika 67).
+    
+    Args:
+        shape: GEV shape parameter (ξ), which must be below 0.5
+    
+    Returns:
+        3 × 3 array with rows and columns ordered (location, scale, shape)
+    """
+    # The formulas below divide by the shape up to four times, so they lose
+    # precision close to zero. Inside ±0.005, interpolate between the two edges.
+    near_zero = 0.005
+    if abs(shape) < near_zero:
+        below = gev_information_matrix(-near_zero)
+        above = gev_information_matrix(near_zero)
+        weight = (shape + near_zero) / (2.0 * near_zero)
+        return (1.0 - weight) * below + weight * above
+    
+    k = shape
+    euler = np.euler_gamma
+    g = gamma(2.0 - k)
+    p = (1.0 - k) ** 2 * gamma(1.0 - 2.0 * k)
+    q = g * (digamma(1.0 - k) - (1.0 - k) / k)
+    
+    loc_loc = p
+    loc_scale = (p - g) / k
+    loc_shape = -(q + p / k) / k
+    scale_scale = (1.0 - 2.0 * g + p) / k**2
+    scale_shape = (1.0 - euler - (1.0 - g) / k - q - p / k) / k**2
+    shape_shape = (np.pi**2 / 6.0 + (1.0 - euler - 1.0 / k) ** 2 + 2.0 * q / k + p / k**2) / k**2
+    
+    return np.array([
+        [loc_loc, loc_scale, loc_shape],
+        [loc_scale, scale_scale, scale_shape],
+        [loc_shape, scale_shape, shape_shape]
+    ])
+
+def gev_parameter_covariance(scale, shape, data_points):
+    """
+    Covariance of the fitted GEV parameters for a record of `data_points` years.
+    
+    This is the inverse of the expected Fisher information. It is the standard
+    large-sample covariance of a maximum likelihood fit.
+    
+    Returns:
+        3 × 3 array with rows and columns ordered (location, scale, shape)
+    """
+    unit_covariance = np.linalg.inv(gev_information_matrix(shape))
+    
+    # Location and scale are wind speeds, so their rows and columns scale with σ
+    units = np.array([scale, scale, 1.0])
+    return unit_covariance * np.outer(units, units) / data_points
+
+def gev_return_level_gradient(return_period, scale, shape):
+    """
+    Derivatives of the return level with respect to (location, scale, shape).
+    """
+    y = -np.log(1.0 - 1.0 / return_period)
+    log_y = np.log(y)
+    
+    if abs(shape) > 1e-5:
+        d_scale = (1.0 - y**shape) / shape
+        d_shape = -scale * ((1.0 - y**shape) / shape**2 + y**shape * log_y / shape)
+    else:
+        # Gumbel limit (ξ -> 0)
+        d_scale = -log_y
+        d_shape = -0.5 * scale * log_y**2
+    
+    return np.array([1.0, d_scale, d_shape])
+
 def gev_return_level_ci(return_period, location, scale, shape, data_points=40):
     """
-    Calculate confidence intervals for GEV return level using delta method.
-    Includes a L'Hôpital limit switch for the Gumbel domain (ξ ≈ 0) to prevent
-    variance explosion.
+    Calculate the 95% confidence interval for a GEV return level using the delta method.
+    
+    The variance of the return level is g' V g, where g holds the derivatives of
+    the return level with respect to the three parameters and V is the covariance
+    of the fitted parameters.
+    
+    V assumes a maximum likelihood fit. For parameters fitted another way, such
+    as L-moments, the interval is an approximation.
+    
+    Args:
+        return_period: Return period in years (R)
+        location: GEV location parameter (μ)
+        scale: GEV scale parameter (σ)
+        shape: GEV shape parameter (ξ)
+        data_points: Number of annual maxima the parameters were fitted to
+    
+    Returns:
+        (lower, upper) bounds. Both are NaN when shape >= 0.5, where the
+        covariance does not exist.
     """
     # Calculate return level
     rp_level = gev_return_level(return_period, location, scale, shape)
     
-    if np.isnan(rp_level):
+    if np.isnan(rp_level) or shape >= 0.5:
         return np.nan, np.nan
     
     try:
-        # p is the non-exceedance probability
-        p = 1.0 - 1.0 / return_period
-        
-        # y is the standard Gumbel reduced variate equivalent
-        y = -np.log(p)
-        log_log_p = np.log(y) 
-        
-        # Delta Method gradient approximations (derivatives of the return level formula)
-        if abs(shape) > 1e-5:
-            # Standard GEV gradients for scale and shape
-            d_scale = (1.0 - y**shape) / shape
-            d_shape = - (1.0 - y**shape) / (shape**2) + (y**shape) * log_log_p / shape
-        else:
-            # Gumbel limit (ξ -> 0) derived via L'Hôpital's rule
-            # Bypasses the division by shape**2 entirely
-            d_scale = -log_log_p
-            d_shape = -0.5 * (log_log_p ** 2)
-            
-        # Combine the gradients into a structural variance factor
-        # Using the magnitude of the gradient vector to scale the standard error
-        var_factor = np.sqrt(d_scale**2 + d_shape**2)
-        
-        # Increase uncertainty for long return periods
-        rp_factor = np.log(return_period + 1)
+        gradient = gev_return_level_gradient(return_period, scale, shape)
+        covariance = gev_parameter_covariance(scale, shape, data_points)
         
         # Standard error estimate
-        se = (scale / np.sqrt(data_points)) * var_factor * rp_factor
+        se = np.sqrt(gradient @ covariance @ gradient)
         
         # 95% CI (z = 1.96)
         ci_width = 1.96 * se
@@ -245,7 +313,7 @@ def main(base_dir=None):
         ds_out.method = 'Block Maxima (annual) fitted to GEV via MLE'
         ds_out.num_years = num_years
         ds_out.confidence_level = '95%'
-        ds_out.ci_method = 'Delta method approximation'
+        ds_out.ci_method = 'Delta method with the expected Fisher information of the GEV'
         ds_out.created_date = datetime.now().isoformat()
         ds_out.grid_dimensions = f'{south_north} x {west_east}'
         ds_out.Conventions = 'CF-1.8'
