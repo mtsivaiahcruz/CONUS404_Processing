@@ -10,8 +10,9 @@ This folder holds a pilot comparison of two ways to estimate extreme wind speeds
 The scripts extract the data, choose the 13 locations, reproduce the GEV baseline, compare it
 with CADENCE's current files, run the POT tests, compare GEV with POT, make the results table
 and the plots, set the priors on the tail shape, fit the GEV and POT with and without a
-constrained tail, test how much the constrained fits depend on the prior, and check every
-version against simulated records where the true return levels are known.
+constrained tail, test how much the constrained fits depend on the prior, check every
+version against simulated records where the true return levels are known, score each
+version on years it was not fitted to, check how much one year can move each estimate, check the POT threshold, and check the storm-separation rule.
 
 ## How to run it
 
@@ -21,12 +22,12 @@ From this folder:
 python run_all.py
 ```
 
-This runs steps 01 to 17 in order, then compares the new outputs with the saved results and
+This runs steps 01 to 21 in order, then compares the new outputs with the saved results and
 prints a verdict for each file. It takes under an hour on my laptop.
 
 - `python run_all.py 8` starts at step 08. The outputs of the earlier steps must already exist.
 - Each script can be run on its own, for example `python 04_gev_baseline.py`.
-- Steps 01 to 17 write only to `output/` and change nothing in `data/`. To write somewhere
+- Steps 01 to 21 write only to `output/` and change nothing in `data/`. To write somewhere
   else, set the `ANALYSIS_OUT` environment variable to a folder.
 
 ## What each script does
@@ -50,6 +51,10 @@ prints a verdict for each file. It takes under an hour on my laptop.
 | `15_bayes_fits.py` | Fits four versions at each cell: the GEV and POT (98th percentile, 2-day separation), each with the flat and the main prior on the shape. All four use the same Bayesian fit (`bayes.py`). Gives the 20-, 50- and 100-year estimates with 95% credible intervals, and checks convergence (split R-hat and effective sample size). | `bayes_fits.csv`, `bayes_parameters.csv`, `work/bayes_draws.npz` |
 | `16_prior_sensitivity.py` | Refits the two constrained versions with the wider and the narrower prior, and reports how far the 20-, 50- and 100-year estimates and intervals move from the main prior. Also counts, for each prior, whether the comparisons from step 15 still hold. | `prior_sensitivity.csv`, `prior_sensitivity_summary.csv` |
 | `17_simulation_study.py` | Simulates 500 45-year records from each of three known models (light-tailed, near zero and heavy-tailed, from the POT fits at Atlanta, Chicago and New Orleans), with the annual maxima and the POT events taken from the same record. Fits the GEV and POT with the flat, main and wider priors to every record, and reports how often each 95% interval contains the true 20-, 50- and 100-year level, and the bias and error of the estimates. Uses every processor core; `--records` and `--processes` change the defaults. | `simulation_coverage.csv`, `work/simulation_fits.csv`, `work/simulation_chain_check.csv` |
+| `18_holdout_validation.py` | Splits the 45 years into nine 5-year blocks, fits each of the six versions to the other 40 years, and scores its prediction of the 5 held-out annual maxima: the threshold-weighted CRPS (above each cell's median annual maximum, and again above its 90th percentile), the plain CRPS, and 90% predictive interval coverage. Score differences come with 95% ranges from a bootstrap over the held-out years. Uses every processor core. | `holdout_scores.csv`, `work/holdout_predictions.csv` |
+| `19_leave_one_year_out.py` | Refits each of the six versions at each cell 45 times, each time without one water year, and reports the median and largest change in the 100-year estimate and the years behind the largest changes. Uses every processor core and resumes if it stops part-way. | `leave_one_year_out.csv`, `stability_summary.csv` |
+| `20_threshold_check.py` | Refits POT with the wider prior at the 95th to 99th percentile thresholds (2-day separation) and checks whether the 98th holds up: its 100-year estimate against every other threshold's interval, the stability of the shape and modified scale, and a Kolmogorov-Smirnov test of the GPD fit. Also compares the spread across thresholds with the fits without a prior from step 08. | `threshold_check.csv`, `threshold_check_summary.csv` |
+| `21_separation_check.py` | Refits the three POT versions with 1- to 7-day separation rules, and POT with the wider prior on the full grid of thresholds and rules. Checks whether the events are independent with the extremal index (Ferro & Segers intervals estimator, with and without the season removed) and the correlation between consecutive peaks. For the GEV, checks for consecutive annual maxima from the same storm, their correlation, and a trend. | `separation_check.csv`, `independence_check.csv`, `gev_boundary_check.csv` |
 | `check_against_delivered.py` | Compares `output/` with the saved results in `data/`. | |
 
 Shared code:
