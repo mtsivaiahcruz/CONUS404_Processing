@@ -167,7 +167,11 @@ CONUS404_Processing/
 │   └── test_calculate_return_periods.py  # Phase 4 conversion and export tests
 │
 ├── year_raw_data/                        # Per-water-year extracted NetCDF files
-│   ├── water_year_1980/
+│   ├── water_year_198cd C:\Users\mtsiv\CADENCE\CONUS404_Processing\pot_pilot
+python 18_holdout_validation.py
+python 19_leave_one_year_out.py
+python 20_threshold_check.py
+python 21_separation_check.py0/
 │   │   └── wrfxtrm_d01_max_spduv10max_1980.nc
 │   ├── water_year_1981/
 │   │   └── wrfxtrm_d01_max_spduv10max_1981.nc
