@@ -1,4 +1,4 @@
-# For steps 01 to 16, test_pot.py and test_bayes.py
+# For steps 01 to 17, test_pot.py and test_bayes.py
 numpy
 pandas
 scipy

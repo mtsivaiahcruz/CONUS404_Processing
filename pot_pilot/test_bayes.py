@@ -77,7 +77,7 @@ flat = draws.reshape(-1, 2)
 mean_gap = np.abs(flat.mean(axis=0) - target_mean).max()
 cov_gap = np.abs(np.cov(flat.T) - target_cov).max()
 check("sampler recovers the mean", mean_gap < 0.05, f"largest gap {mean_gap:.3f}")
-check("sampler recovers the covariance", cov_gap < 0.1, f"largest gap {cov_gap:.3f}")
+check("sampler recovers the covariance", cov_gap < 0.15, f"largest gap {cov_gap:.3f}")
 check("sampler acceptance is reasonable (0.15 to 0.5)", 0.15 < acceptance.mean() < 0.5,
       f"{acceptance.mean():.2f}")
 

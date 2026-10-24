@@ -10,7 +10,8 @@ This folder holds a pilot comparison of two ways to estimate extreme wind speeds
 The scripts extract the data, choose the 13 locations, reproduce the GEV baseline, compare it
 with CADENCE's current files, run the POT tests, compare GEV with POT, make the results table
 and the plots, set the priors on the tail shape, fit the GEV and POT with and without a
-constrained tail, and test how much the constrained fits depend on the prior.
+constrained tail, test how much the constrained fits depend on the prior, and check every
+version against simulated records where the true return levels are known.
 
 ## How to run it
 
@@ -20,12 +21,12 @@ From this folder:
 python run_all.py
 ```
 
-This runs steps 01 to 16 in order, then compares the new outputs with the saved results and
-prints a verdict for each file. It takes about 45 minutes on my laptop.
+This runs steps 01 to 17 in order, then compares the new outputs with the saved results and
+prints a verdict for each file. It takes under an hour on my laptop.
 
 - `python run_all.py 8` starts at step 08. The outputs of the earlier steps must already exist.
 - Each script can be run on its own, for example `python 04_gev_baseline.py`.
-- Steps 01 to 16 write only to `output/` and change nothing in `data/`. To write somewhere
+- Steps 01 to 17 write only to `output/` and change nothing in `data/`. To write somewhere
   else, set the `ANALYSIS_OUT` environment variable to a folder.
 
 ## What each script does
@@ -48,6 +49,7 @@ prints a verdict for each file. It takes about 45 minutes on my laptop.
 | `14_tail_priors.py` | Sets the priors on the tail shape for the constrained-tail fits: a main prior, a wider and a narrower one for sensitivity tests, and a flat one for the unconstrained fits. Checks SciPy's sign conventions and compares the priors with the pilot fits. | `tail_priors.csv`, `plots/fig5_tail_priors.png` |
 | `15_bayes_fits.py` | Fits four versions at each cell: the GEV and POT (98th percentile, 2-day separation), each with the flat and the main prior on the shape. All four use the same Bayesian fit (`bayes.py`). Gives the 20-, 50- and 100-year estimates with 95% credible intervals, and checks convergence (split R-hat and effective sample size). | `bayes_fits.csv`, `bayes_parameters.csv`, `work/bayes_draws.npz` |
 | `16_prior_sensitivity.py` | Refits the two constrained versions with the wider and the narrower prior, and reports how far the 20-, 50- and 100-year estimates and intervals move from the main prior. Also counts, for each prior, whether the comparisons from step 15 still hold. | `prior_sensitivity.csv`, `prior_sensitivity_summary.csv` |
+| `17_simulation_study.py` | Simulates 500 45-year records from each of three known models (light-tailed, near zero and heavy-tailed, from the POT fits at Atlanta, Chicago and New Orleans), with the annual maxima and the POT events taken from the same record. Fits the GEV and POT with the flat, main and wider priors to every record, and reports how often each 95% interval contains the true 20-, 50- and 100-year level, and the bias and error of the estimates. Uses every processor core; `--records` and `--processes` change the defaults. | `simulation_coverage.csv`, `work/simulation_fits.csv`, `work/simulation_chain_check.csv` |
 | `check_against_delivered.py` | Compares `output/` with the saved results in `data/`. | |
 
 Shared code:

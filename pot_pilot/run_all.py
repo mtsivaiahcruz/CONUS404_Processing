@@ -1,6 +1,6 @@
 """Run every step in order, then compare the new outputs with the delivered result files.
 
-    python run_all.py        every step (about 45 minutes on my laptop)
+    python run_all.py        every step (under an hour on my laptop)
     python run_all.py 8      start at step 08 (the earlier outputs must already exist)
 
 Everything is written to pot_pilot/output. The delivered result files in pot_pilot/data are
@@ -29,6 +29,7 @@ STEPS = [
     "14_tail_priors.py",
     "15_bayes_fits.py",
     "16_prior_sensitivity.py",
+    "17_simulation_study.py",
     "check_against_delivered.py",
 ]
 

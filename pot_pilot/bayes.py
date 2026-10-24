@@ -123,22 +123,25 @@ def sample(log_post, mode, curvature, seed, n_chains=4, n_warmup=4000, n_keep=60
     acceptance = np.empty(n_chains)
 
     for chain in range(n_chains):
-        current = rng.multivariate_normal(mode, 4.0 * cov)
+        start_factor = np.linalg.cholesky(cov)
+        current = mode + 2.0 * start_factor @ rng.standard_normal(d)
         current_lp = log_post(current)
         while not np.isfinite(current_lp):
-            current = rng.multivariate_normal(mode, cov)
+            current = mode + start_factor @ rng.standard_normal(d)
             current_lp = log_post(current)
-        proposal_cov = step_scale * cov
+        factor = np.linalg.cholesky(step_scale * cov)    # proposal = current + factor @ z
+        steps = rng.standard_normal((n_warmup + n_keep, d))
+        log_u = np.log(rng.random(n_warmup + n_keep))
         history = np.empty((n_warmup, d))
         accepted = 0
         for i in range(n_warmup + n_keep):
             # Warm-up: every 500 steps, tune the proposal to the draws so far.
             if i < n_warmup and i >= 1000 and i % 500 == 0:
                 recent = history[i // 2:i]
-                proposal_cov = step_scale * (np.cov(recent.T) + 1e-10 * np.eye(d))
-            candidate = rng.multivariate_normal(current, proposal_cov)
+                factor = np.linalg.cholesky(step_scale * (np.cov(recent.T) + 1e-10 * np.eye(d)))
+            candidate = current + factor @ steps[i]
             candidate_lp = log_post(candidate)
-            if np.log(rng.random()) < candidate_lp - current_lp:
+            if log_u[i] < candidate_lp - current_lp:
                 current, current_lp = candidate, candidate_lp
                 if i >= n_warmup:
                     accepted += 1
@@ -218,11 +221,13 @@ def pilot_series(cells):
     return values, annual_max
 
 
-def fit_version(model, prior_name, data, start, seed, return_periods, n_years, threshold=None):
+def fit_version(model, prior_name, data, start, seed, return_periods, n_years, threshold=None,
+                n_warmup=4000, n_keep=6000):
     """Fit one version at one cell and summarize the posterior.
 
     model is "GEV" (data = the annual maxima) or "POT" (data = the excesses over threshold).
-    start is the maximum-likelihood fit, used as the starting point. Returns a dictionary with
+    start is a starting point for finding the mode (the maximum-likelihood fit, or close to it).
+    n_warmup and n_keep are the chain lengths passed to sample(). Returns a dictionary with
     the posterior mode, the draws of every reported quantity as (chains, draws) arrays, the
     return-level draws (draws x return periods), R-hat and ESS for each quantity, and the
     acceptance rate.
@@ -236,7 +241,7 @@ def fit_version(model, prior_name, data, start, seed, return_periods, n_years, t
         names = ["log_scale", "xi"]
 
     mode, curvature = posterior_mode(log_post, start)
-    draws, acceptance = sample(log_post, mode, curvature, seed)
+    draws, acceptance = sample(log_post, mode, curvature, seed, n_warmup=n_warmup, n_keep=n_keep)
     n_chains, n_draws, _ = draws.shape
 
     quantities = {name: draws[:, :, i] for i, name in enumerate(names)}
