@@ -30,10 +30,13 @@ STEPS = [
     "15_bayes_fits.py",
     "16_prior_sensitivity.py",
     "17_simulation_study.py",
+    "17a_zero_center_simulation.py",
     "18_holdout_validation.py",
+    "18a_tail_scores.py",
     "19_leave_one_year_out.py",
     "20_threshold_check.py",
     "21_separation_check.py",
+    "21a_trend_check.py",
     "check_against_delivered.py",
 ]
 

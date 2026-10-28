@@ -35,6 +35,8 @@ SHAPE_PRIORS = {
     "main": {"kind": "normal", "mean": -0.10, "sd": 0.12},
     "wider": {"kind": "normal", "mean": -0.10, "sd": 0.20},
     "narrower": {"kind": "normal", "mean": -0.10, "sd": 0.06},
+    "zero": {"kind": "normal", "mean": 0.0, "sd": 0.12},
+    "zero_wider": {"kind": "normal", "mean": 0.0, "sd": 0.20},
 }
 SMALL_XI = 1e-6    # below this, use the xi = 0 (Gumbel or exponential) form
 

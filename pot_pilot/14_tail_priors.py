@@ -21,6 +21,8 @@ The priors, all on xi:
     main               normal, mean -0.10, sd 0.12. Used for the constrained-tail fits.
     wider              normal, mean -0.10, sd 0.20. Sensitivity test.
     narrower           normal, mean -0.10, sd 0.06. Sensitivity test.
+    zero               normal, mean 0, sd 0.12. Sensitivity test of the center.
+    zero_wider         normal, mean 0, sd 0.20. Sensitivity test of the center.
     martins_stedinger  beta(6, 9) on kappa from -0.5 to 0.5. For comparison only, not used.
 Location and log scale get flat priors in every version.
 
@@ -32,6 +34,9 @@ Where the numbers come from:
                  Emanuel's potential intensity for hurricanes), so the center sits below 0.
     sd 0.12      The width of the Martins & Stedinger prior (sd 0.122), which is the usual
                  strength for a prior meant to stop unstable small-sample fits.
+    mean 0       Pintar, Simiu, Lombardo & Levitan (2015), NIST SP 500-301: NIST's maps of
+                 non-hurricane wind speeds for the U.S. use a tail length of 0 (the Gumbel
+                 case). The two priors centered at 0 test how much the center matters.
     normal       No hard bounds on the shape, so a cell whose data clearly show a heavier
                  tail can still get one.
 
@@ -100,6 +105,19 @@ PRIORS = {
         source="As for main",
         justification="Half the main width: what happens if the published estimates are "
                       "trusted strongly. Its range includes the NIST working value of -0.2.",
+    ),
+    "zero": dict(
+        dist=norm(0.0, 0.12), used_in="Sensitivity test of the center",
+        distribution="Normal(mean 0, sd 0.12)",
+        source="Pintar, Simiu, Lombardo & Levitan 2015 (NIST SP 500-301)",
+        justification="Centered on the tail length of 0 used in NIST's 2015 non-hurricane wind "
+                      "maps, with the main prior's width.",
+    ),
+    "zero_wider": dict(
+        dist=norm(0.0, 0.20), used_in="Sensitivity test of the center",
+        distribution="Normal(mean 0, sd 0.20)",
+        source="As for zero",
+        justification="Centered at 0, with the wider prior's width.",
     ),
     "martins_stedinger": dict(
         dist=beta(9, 6, loc=-0.5, scale=1.0), used_in="Not used, for comparison",

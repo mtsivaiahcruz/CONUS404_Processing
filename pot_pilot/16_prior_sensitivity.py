@@ -1,9 +1,15 @@
-"""How much the constrained-tail fits depend on the prior: refit them with the wider and the
-narrower prior from step 14.
+"""How much the constrained-tail fits depend on the prior: refit them with the other priors
+from step 14.
 
 The GEV and POT with a constrained tail are refitted at every pilot cell exactly as in step 15,
-but with the wider prior (sd 0.20) and the narrower prior (sd 0.06) on the shape in place of
-the main prior (sd 0.12). All three share the same center, -0.10.
+but with each of the other priors on the shape in place of the main prior (normal, mean -0.10,
+sd 0.12):
+    wider        mean -0.10, sd 0.20      a weaker pull, same center
+    narrower     mean -0.10, sd 0.06      a stronger pull, same center
+    zero         mean 0, sd 0.12          the main prior's width, centered at 0
+    zero_wider   mean 0, sd 0.20          the wider prior's width, centered at 0
+The first two test the width and the last two test the center. A center of 0 is the tail
+length NIST's 2015 non-hurricane wind maps use (Pintar et al. 2015, NIST SP 500-301).
 
 Two things are reported:
     - per cell, how far the 20-, 50- and 100-year estimates and intervals move from the main
@@ -33,7 +39,7 @@ from paths import DAILY_CSV, N_YEARS, OUT, require
 PERCENTILE = 98    # the same POT setting as step 15
 SEPARATION = 2
 RETURN_PERIODS = [20, 50, 100]
-NEW_PRIORS = ["wider", "narrower"]
+NEW_PRIORS = ["wider", "narrower", "zero", "zero_wider"]
 RHAT_LIMIT = 1.01
 ESS_LIMIT = 400
 
@@ -104,7 +110,8 @@ table["estimate_change_ms"] = table.estimate_ms - table.main_estimate_ms
 table["estimate_change_pct"] = 100 * table.estimate_change_ms / table.main_estimate_ms
 table["width_change_pct"] = 100 * (table.width_ms / table.main_width_ms - 1)
 table = table.drop(columns=["main_estimate_ms", "main_width_ms"])
-table["prior_order"] = table.prior.map({"main": 0, "wider": 1, "narrower": 2})
+table["prior_order"] = table.prior.map({"main": 0, "wider": 1, "narrower": 2, "zero": 3,
+                                          "zero_wider": 4})
 table = table.sort_values(["longitude", "model", "prior_order", "return_period"]).drop(
     columns="prior_order")
 numbers = table.select_dtypes("number").columns.difference(
