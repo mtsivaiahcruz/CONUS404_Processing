@@ -12,7 +12,7 @@ with CADENCE's current files, run the POT tests, compare GEV with POT, make the 
 and the plots, set the priors on the tail shape, fit the GEV and POT with and without a
 constrained tail, test how much the constrained fits depend on the prior, check every
 version against simulated records where the true return levels are known, score each
-version on years it was not fitted to, check how much one year can move each estimate, check the POT threshold, and check the storm-separation rule.
+version on years it was not fitted to, check how much one year can move each estimate, check the POT threshold, check the storm-separation rule, test every version on records that mix hurricanes with other storms, and combine all of it into one results table and a set of plots.
 
 ## How to run it
 
@@ -22,12 +22,13 @@ From this folder:
 python run_all.py
 ```
 
-This runs steps 01 to 21 in order, then compares the new outputs with the saved results and
-prints a verdict for each file. It takes under an hour on my laptop.
+This runs steps 01 to 24 in order, then compares the new outputs with the saved results and
+prints a verdict for each file. Most of the time goes to steps 17 and 22, which fit thousands
+of simulated records.
 
 - `python run_all.py 8` starts at step 08. The outputs of the earlier steps must already exist.
 - Each script can be run on its own, for example `python 04_gev_baseline.py`.
-- Steps 01 to 21 write only to `output/` and change nothing in `data/`. To write somewhere
+- Steps 01 to 24 write only to `output/` and change nothing in `data/`. To write somewhere
   else, set the `ANALYSIS_OUT` environment variable to a folder.
 
 ## What each script does
@@ -58,6 +59,9 @@ prints a verdict for each file. It takes under an hour on my laptop.
 | `20_threshold_check.py` | Refits POT with the wider prior at the 95th to 99th percentile thresholds (2-day separation) and checks whether the 98th holds up: its 100-year estimate against every other threshold's interval, the stability of the shape and modified scale, and a Kolmogorov-Smirnov test of the GPD fit. Also compares the spread across thresholds with the fits without a prior from step 08. | `threshold_check.csv`, `threshold_check_summary.csv` |
 | `21_separation_check.py` | Refits the three POT versions with 1- to 7-day separation rules, and POT with the wider prior on the full grid of thresholds and rules. Checks whether the events are independent with the extremal index (Ferro & Segers intervals estimator, with and without the season removed) and the correlation between consecutive peaks. For the GEV, checks for consecutive annual maxima from the same storm, their correlation, and a trend. | `separation_check.csv`, `independence_check.csv`, `gev_boundary_check.csv` |
 | `21a_trend_check.py` | At each pilot cell, tests whether the water-year median, 90th and 99th percentile daily values and the annual maximum trend over 1980-2024 (Kendall's tau), and finds the most likely change year in the annual maxima (Pettitt test). | `trend_check.csv` |
+| `22_mixed_storm_simulation.py` | At the four coastal cells, labels each event as tropical or not from NOAA's HURDAT2 hurricane tracks (a tropical system within 250 km, from the day before the event to the day after), fits each storm type its own rate and GPD with three hurricane tails, checks the simulator against the real records, and reruns the step 17 coverage test on all six versions. Also compares hurricanes and the annual maxima before and after 1998. `--check-only` stops before the coverage test. | `storm_labels.csv`, `storm_type_trend.csv`, `mixed_storm_model.csv`, `mixed_storm_check.csv`, `mixed_storm_simulation.csv` |
+| `23_results_table.py` | Refits nothing. Puts the outputs of steps 15 to 22 side by side: one row per cell and version (estimates and intervals, held-out scores, stability, threshold and separation checks, the annual-maximum trend, and the mixed-storm coverage at the coastal cells), and one row per version (the simulation studies, pooled held-out scores, stability at a typical cell and the median interval width). | `checkpoint2_results_table.csv`, `checkpoint2_version_summary.csv` |
+| `24_make_plots.py` | Figure 6, return-level curves for the GEV and POT with the flat and wider priors, refitted with the seeds of steps 15 and 16 and checked against their tables; Figure 7, simulation coverage; Figure 8, mixed-storm coverage; Figure 9, held-out score differences. | `plots/fig6_return_levels_checkpoint2.png` (and `_data.csv`), `plots/fig7_simulation_coverage.png`, `plots/fig8_mixed_storm_coverage.png`, `plots/fig9_holdout_scores.png` |
 | `check_against_delivered.py` | Compares `output/` with the saved results in `data/`. | |
 
 Shared code:
@@ -68,6 +72,7 @@ Shared code:
 - `bayes.py` is the Bayesian fit used from step 15 on: the GEV and GPD likelihoods, the shape
   priors, the sampler, the convergence checks, and `fit_version`, which fits one version at one
   cell. It needs nothing beyond NumPy and SciPy.
+- `hurdat.py` reads NOAA's HURDAT2 hurricane tracks, for steps 22 and 25.
 - `paths.py` holds the file locations.
 - `h5io.py` opens `.nc` and `.h5` files.
 
@@ -78,6 +83,25 @@ store, so `run_all.py` does not run them.
 |---|---|---|
 | `conus404_spduv10max_extract.py` | Annual maxima and daily quality counts for every grid cell, by water year or calendar year. | `conus404_grid.nc`, `conus404_grid_cells.csv.gz`, `spduv10max_water_1980-2024.nc`, `spduv10max_calendar_1980-2023.nc`, `manifest.json` |
 | `conus404_pilot_daily_extract.py` | Daily values at the 13 pilot cells. | `pilot_daily_spduv10max.csv`, `pilot_daily_spduv10max.json` |
+
+## The full-grid run
+
+`25_full_grid_fits.py` is step 12 of checkpoint 2. It fits the recommended method at every one
+of the 1,387,505 grid cells on DCC: GEV with a flat prior at hurricane cells, POT with the
+wider prior everywhere else. `run_all.py` does not run it. It has five stages:
+
+| Stage | What it does | Where |
+|---|---|---|
+| `check` | Runs the per-cell code on the 13 pilot cells. With the pilot's seeds it has to match `checkpoint2_results_table.csv` exactly, and the hurricane cells have to be the four coastal ones. Writes `output/full_grid_pilot_check.csv`. | laptop, under a minute |
+| `selftest` | Runs download, fit and combine on a small made-up grid that holds the pilot cells, and checks that the pipeline gives exactly what the per-cell code gives. Needs netCDF4. | laptop, about a minute |
+| `download` | Downloads the daily maxima for water years 1980-2024 from the public CONUS404 store in 12 blocks of 350 x 350 cells, and checks each pilot cell against `pilot_daily_spduv10max.csv`. | DCC, 12 jobs |
+| `fit` | Fits one share of the cells. Saves every 250 cells and resumes if it stops. | DCC, 100 jobs |
+| `combine` | Writes `gev_return_periods.nc` and `gev_return_periods.csv` in the layout of `40_calculate_return_periods.py`, with the method, hurricane flag and convergence of each cell added, and `full_grid_summary.csv`, which compares the 100-year level with CADENCE's current file. | DCC, 1 job |
+
+`bash 25_full_grid_fits.sh submit` submits the three DCC stages, each waiting for the one
+before, and `bash 25_full_grid_fits.sh status` shows how far they have got. The settings
+(output folder, partition, number of jobs and the Python environment) are at the top of the
+script. The DCC stages also need xarray, zarr, s3fs and netCDF4, and about 95 GB of space.
 
 Three more scripts check the code itself:
 
@@ -113,8 +137,12 @@ CADENCE/
         spduv10max_water_1980-2024.nc
         manifest.json
         pilot_daily_spduv10max.csv          from conus404_pilot_daily_extract.py
+        hurdat2-1851-2024.txt               NOAA's Atlantic hurricane tracks (steps 22 and 25)
         pilot_*.csv, cadence_gumbel_branch_cells.csv, plots/     the saved results
 ```
+
+`hurdat2-1851-2024.txt` is HURDAT2, the National Hurricane Center's record of every Atlantic
+tropical system, from nhc.noaa.gov/data. It is public data.
 
 `CADENCE` is the folder that holds the repository. If the two GEV files are somewhere else, set
 the `CADENCE_DIR` environment variable to that folder.

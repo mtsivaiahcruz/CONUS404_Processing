@@ -48,6 +48,7 @@ CAL_NC = DATA / "spduv10max_calendar_1980-2023.nc"
 WATER_NC = DATA / "spduv10max_water_1980-2024.nc"
 MANIFEST = DATA / "manifest.json"
 DAILY_CSV = DATA / "pilot_daily_spduv10max.csv"
+HURDAT2 = DATA / "hurdat2-1851-2024.txt"    # NOAA's Atlantic hurricane tracks, for step 22
 YEAR_RAW = REPO / "year_raw_data"
 CADENCE_H5 = CADENCE / "gev_parameters.h5"
 CADENCE_NC = CADENCE / "gev_return_periods.nc"

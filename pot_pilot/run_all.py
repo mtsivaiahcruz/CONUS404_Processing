@@ -1,6 +1,6 @@
 """Run every step in order, then compare the new outputs with the delivered result files.
 
-    python run_all.py        every step (under an hour on my laptop)
+    python run_all.py        every step
     python run_all.py 8      start at step 08 (the earlier outputs must already exist)
 
 Everything is written to pot_pilot/output. The delivered result files in pot_pilot/data are
@@ -37,6 +37,9 @@ STEPS = [
     "20_threshold_check.py",
     "21_separation_check.py",
     "21a_trend_check.py",
+    "22_mixed_storm_simulation.py",
+    "23_results_table.py",
+    "24_make_plots.py",
     "check_against_delivered.py",
 ]
 
